@@ -1,106 +1,123 @@
-from datetime import datetime, timedelta
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from db_connection import get_session
-from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from models import User
 from operations import get_user, pwd_context
 from pydantic import BaseModel
+from responses import ResponseProfileUser, UserLoginBody
 from sqlalchemy.orm import Session
 
 SECRET_KEY = "a_very_secret_key"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-
-def authenticate_user(
-    session: Session, username_or_email: str, password: str
-) -> User | None:
-    try:
-        validate_email(username_or_email)
-        query_filter = User.email
-    except EmailNotValidError:
-        query_filter = User.username
-    user = session.query(User).filter(query_filter == username_or_email).first()
-    if not user or not pwd_context.verify(password, user.hashed_password):
-        return
-    return user
-
-
-def create_access_token(data: dict) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-def decode_access_token(token: str, session: Session) -> User | None:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-    except JWTError:
-        return
-    if not username:
-        return
-    user = get_user(session, username)
-    return user
+ACCESS_TOKEN_EXPIRE_SECONDS = 3600
 
 
 router = APIRouter()
 
+bearer_scheme = HTTPBearer(auto_error=False)
 
-class Token(BaseModel):
+
+class TokenResponse(BaseModel):
     access_token: str
     token_type: str
+    expires_in: int
+
+
+def authenticate_user(session: Session, email: str, password: str):
+    """
+    Authenticate using email + password (per instructor spec).
+    """
+    user = get_user(session, email)
+    if not user:
+        return None
+    if not pwd_context.verify(password, user.hashed_password):
+        return None
+    return user
+
+
+def create_access_token(subject: str) -> str:
+    """
+    subject will be stored in the JWT `sub` claim.
+    Here we store the user's email to match the assignment flow.
+    """
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(seconds=ACCESS_TOKEN_EXPIRE_SECONDS)
+    payload = {"sub": subject, "exp": expire}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_access_token(token: str, session: Session):
+    """
+    Decode JWT and fetch the user.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        subject = payload.get("sub")
+    except JWTError:
+        return None
+
+    if not subject:
+        return None
+
+    return get_user(session, subject)
 
 
 @router.post(
-    "/token",
-    response_model=Token,
+    "/login",
+    response_model=TokenResponse,
     responses={
-        status.HTTP_401_UNAUTHORIZED: {"description": "Incorrect username or password"}
+        status.HTTP_401_UNAUTHORIZED: {"description": "Incorrect email or password"}
     },
 )
-def get_user_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+def login(
+    body: UserLoginBody,
     session: Session = Depends(get_session),
 ):
-    user = authenticate_user(session, form_data.username, form_data.password)
+    user = authenticate_user(session, body.email, body.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect email or password",
         )
-    access_token = create_access_token(data={"sub": user.username})
+
+    token = create_access_token(subject=user.email)
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
+        "access_token": token,
+        "token_type": "Bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_SECONDS,
     }
-
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 @router.get(
-    "/users/me",
+    "/profile",
+    response_model=ResponseProfileUser,
     responses={
-        status.HTTP_401_UNAUTHORIZED: {"description": "User not authorized"},
-        status.HTTP_200_OK: {"description": "username authorized"},
+        status.HTTP_403_FORBIDDEN: {"description": "Not Authorized"},
     },
 )
-def read_user_me(
-    token: str = Depends(oauth2_scheme),
+def profile(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     session: Session = Depends(get_session),
 ):
-    user = decode_access_token(token, session)
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not Authorized"
+        )
+
+    user = decode_access_token(credentials.credentials, session)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not authorized",
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not Authorized"
         )
-    return {
-        "description": f"{user.username} authorized",
-    }
+
+    return ResponseProfileUser(
+        id=str(user.id),
+        email=user.email,
+        username=user.username,
+    )

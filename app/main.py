@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 
+import security
 from db_connection import get_engine, get_session
 from fastapi import Depends, FastAPI, HTTPException, status
 from models import Base
@@ -15,6 +16,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Saas application", lifespan=lifespan)
+app.include_router(security.router)
 
 
 @app.post(
