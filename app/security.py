@@ -8,8 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from operations import get_user, pwd_context
-from pydantic import BaseModel
-from responses import ResponseProfileUser, UserLoginBody
+from responses import ResponseProfileUser, TokenResponse, UserLoginBody
 from sqlalchemy.orm import Session
 
 SECRET_KEY = "a_very_secret_key"
@@ -21,12 +20,6 @@ ACCESS_TOKEN_EXPIRE_SECONDS = 3600
 router = APIRouter()
 
 bearer_scheme = HTTPBearer(auto_error=False)
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str
-    expires_in: int
 
 
 def authenticate_user(session: Session, email: str, password: str):
@@ -79,7 +72,7 @@ def login(
     body: UserLoginBody,
     session: Session = Depends(get_session),
 ):
-    user = authenticate_user(session, body.email, body.password)
+    user = authenticate_user(session=session, **body.model_dump())
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
