@@ -1,8 +1,15 @@
+from enum import Enum
+
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class Role(str, Enum):
+    user = "user"
+    admin = "admin"
 
 
 class User(Base):
@@ -11,3 +18,4 @@ class User(Base):
     username: Mapped[str] = mapped_column(unique=True, index=True)
     email: Mapped[str] = mapped_column(unique=True, index=True)
     hashed_password: Mapped[str]
+    role: Mapped[Role] = mapped_column(default=Role.basic)

@@ -1,5 +1,4 @@
-from email_validator import EmailNotValidError, validate_email
-from models import User
+from models import Role, User
 from passlib.context import CryptContext
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -13,9 +12,15 @@ def add_user(
     username: str,
     password: str,
     email: str,
+    role: Role = Role.basic,
 ) -> User | None:
     hashed_password = pwd_context.hash(password)
-    db_user = User(username=username, email=email, hashed_password=hashed_password)
+    db_user = User(
+        username=username,
+        email=email,
+        hashed_password=hashed_password,
+        role=role,
+    )
     session.add(db_user)
     try:
         session.commit()
@@ -26,11 +31,6 @@ def add_user(
     return db_user
 
 
-def get_user(session: Session, username_or_email: str) -> User | None:
-    try:
-        validate_email(username_or_email)
-        query_filter = User.email
-    except EmailNotValidError:
-        query_filter = User.username
-    user = session.query(User).filter(query_filter == username_or_email).first()
+def get_user(session: Session, email: str) -> User | None:
+    user = session.query(User).filter(User.email == email).first()
     return user

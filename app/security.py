@@ -1,20 +1,25 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from db_connection import get_session
+from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from models import Role
 from operations import get_user, pwd_context
 from responses import ResponseProfileUser, TokenResponse, UserLoginBody
 from sqlalchemy.orm import Session
 
-SECRET_KEY = "a_very_secret_key"
-ALGORITHM = "HS256"
+load_dotenv()
 
-ACCESS_TOKEN_EXPIRE_SECONDS = 3600
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+
+ACCESS_TOKEN_EXPIRE_SECONDS = os.getenv("ACCESS_TOKEN_EXPIRE_SECONDS")
 
 
 router = APIRouter()
@@ -24,9 +29,10 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 def authenticate_user(session: Session, email: str, password: str):
     """
-    Authenticate using email + password (per instructor spec).
+    Authenticate using email + password
     """
     user = get_user(session, email)
+    print(f"The user I got is {user}.")
     if not user:
         return None
     if not pwd_context.verify(password, user.hashed_password):
@@ -34,14 +40,14 @@ def authenticate_user(session: Session, email: str, password: str):
     return user
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str, role: Role) -> str:
     """
     subject will be stored in the JWT `sub` claim.
     Here we store the user's email to match the assignment flow.
     """
     now = datetime.now(timezone.utc)
     expire = now + timedelta(seconds=ACCESS_TOKEN_EXPIRE_SECONDS)
-    payload = {"sub": subject, "exp": expire}
+    payload = {"sub": subject, "exp": expire, "role": Role}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -79,7 +85,7 @@ def login(
             detail="Incorrect email or password",
         )
 
-    token = create_access_token(subject=user.email)
+    token = create_access_token(subject=user.email, role=user.role)
     return {
         "access_token": token,
         "token_type": "Bearer",
