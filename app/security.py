@@ -6,7 +6,8 @@ from typing import Optional
 
 from db_connection import get_session
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, status
+from exceptions import InvalidCredentials, PermissionDenied
+from fastapi import APIRouter, Depends, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from models import Role
@@ -64,31 +65,19 @@ def get_current_user(
     session: Session = Depends(get_session),
 ):
     if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
+        raise InvalidCredentials()
 
     payload = decode_access_token(credentials.credentials)
     if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise InvalidCredentials()
 
     subject = payload.get("sub")
     if not subject:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise InvalidCredentials()
 
     user = get_user(session, subject)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
+        raise InvalidCredentials()
 
     return user
 
@@ -96,10 +85,7 @@ def get_current_user(
 def require_role(required_role: Role):
     def role_checker(current_user=Depends(get_current_user)):
         if current_user.role != required_role:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Forbidden",
-            )
+            raise PermissionDenied()
         return current_user
 
     return role_checker
@@ -118,10 +104,7 @@ def login(
 ):
     user = authenticate_user(session=session, **body.model_dump())
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-        )
+        raise InvalidCredentials()
 
     token = create_access_token(subject=user.email, role=user.role)
     return {
@@ -141,3 +124,4 @@ def profile(current_user=Depends(get_current_user)):
         email=current_user.email,
         username=current_user.username,
     )
+
