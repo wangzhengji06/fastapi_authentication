@@ -19,7 +19,7 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 
-ACCESS_TOKEN_EXPIRE_SECONDS = os.getenv("ACCESS_TOKEN_EXPIRE_SECONDS")
+ACCESS_TOKEN_EXPIRE_SECONDS = int(os.getenv("ACCESS_TOKEN_EXPIRE_SECONDS"))
 
 
 router = APIRouter()
@@ -47,24 +47,62 @@ def create_access_token(subject: str, role: Role) -> str:
     """
     now = datetime.now(timezone.utc)
     expire = now + timedelta(seconds=ACCESS_TOKEN_EXPIRE_SECONDS)
-    payload = {"sub": subject, "exp": expire, "role": Role}
+    payload = {"sub": subject, "exp": expire, "role": role}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str, session: Session):
-    """
-    Decode JWT and fetch the user.
-    """
+def decode_access_token(token: str) -> dict | None:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        subject = payload.get("sub")
+        return payload
     except JWTError:
         return None
 
-    if not subject:
-        return None
 
-    return get_user(session, subject)
+def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    session: Session = Depends(get_session),
+):
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
+    payload = decode_access_token(credentials.credentials)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    subject = payload.get("sub")
+    if not subject:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    user = get_user(session, subject)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    return user
+
+
+def require_role(required_role: Role):
+    def role_checker(current_user=Depends(get_current_user)):
+        if current_user.role != required_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden",
+            )
+        return current_user
+
+    return role_checker
 
 
 @router.post(
@@ -96,27 +134,10 @@ def login(
 @router.get(
     "/profile",
     response_model=ResponseProfileUser,
-    responses={
-        status.HTTP_403_FORBIDDEN: {"description": "Not Authorized"},
-    },
 )
-def profile(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
-    session: Session = Depends(get_session),
-):
-    if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Not Authorized"
-        )
-
-    user = decode_access_token(credentials.credentials, session)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Not Authorized"
-        )
-
+def profile(current_user=Depends(get_current_user)):
     return ResponseProfileUser(
-        id=str(user.id),
-        email=user.email,
-        username=user.username,
+        id=str(current_user.id),
+        email=current_user.email,
+        username=current_user.username,
     )
