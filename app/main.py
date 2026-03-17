@@ -3,7 +3,9 @@ from contextlib import asynccontextmanager
 import premium_access
 import security
 from db_connection import get_engine, get_session
-from fastapi import Depends, FastAPI, HTTPException, status
+from exceptions import InvalidCredentials, PermissionDenied, UserAlreadyExists
+from fastapi import Depends, FastAPI, status
+from fastapi.responses import JSONResponse
 from models import Base
 from operations import add_user
 from responses import ResponseCreateUser, UserCreateBody, UserCreateResponse
@@ -16,7 +18,42 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Saas application", lifespan=lifespan)
+app = FastAPI(title="Userapp", lifespan=lifespan)
+
+
+@app.exception_handler(InvalidCredentials)
+async def handle_invalid_credentials(request, exc: InvalidCredentials):
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={
+            "error": exc.error_code,
+            "message": exc.message,
+        },
+    )
+
+
+@app.exception_handler(PermissionDenied)
+async def handle_permission_denied(request, exc: PermissionDenied):
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content={
+            "error": exc.error_code,
+            "message": exc.message,
+        },
+    )
+
+
+@app.exception_handler(UserAlreadyExists)
+async def handle_user_already_exists(request, exc: UserAlreadyExists):
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "error": exc.error_code,
+            "message": exc.message,
+        },
+    )
+
+
 app.include_router(security.router)
 app.include_router(premium_access.router)
 
@@ -32,8 +69,6 @@ def register(
 ) -> dict[str, UserCreateResponse]:
     user = add_user(session=session, **user.model_dump())
     if not user:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "username or email already exists"
-        )
+        raise UserAlreadyExists()
     user_response = UserCreateResponse(username=user.username, email=user.email)
     return {"message": "user created", "user": user_response}
