@@ -1,5 +1,6 @@
 from db_connection import get_session
-from fastapi import APIRouter, Depends, HTTPException, status
+from exceptions import UserAlreadyExists
+from fastapi import APIRouter, Depends, status
 from models import Role
 from operations import add_user
 from responses import (
@@ -33,10 +34,7 @@ def register_premium_user(
         role=Role.premium,
     )
     if not created_user:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="username or email already exists",
-        )
+        raise UserAlreadyExists()
 
     user_response = UserCreateResponse(
         username=created_user.username,
@@ -59,4 +57,3 @@ def admin(
     current_user=Depends(require_role(Role.admin)),
 ):
     return ResponseAdminUser(message=f"Welcome, admin {current_user.username}.")
-
