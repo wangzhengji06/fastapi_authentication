@@ -31,7 +31,7 @@ def register_premium_user(
     created_user = add_user(
         session=session,
         **user.model_dump(),
-        role=Role.premium,
+        role=Role.admin,
     )
     if not created_user:
         raise UserAlreadyExists()

@@ -12,7 +12,7 @@ def add_user(
     username: str,
     password: str,
     email: str,
-    role: Role = Role.basic,
+    role: Role = Role.user,
 ) -> User | None:
     hashed_password = pwd_context.hash(password)
     db_user = User(

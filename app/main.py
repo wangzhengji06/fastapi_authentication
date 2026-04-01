@@ -5,6 +5,7 @@ import security
 from db_connection import get_engine, get_session
 from exceptions import InvalidCredentials, PermissionDenied, UserAlreadyExists
 from fastapi import Depends, FastAPI, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from models import Base
 from operations import add_user
@@ -19,6 +20,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Userapp", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.exception_handler(InvalidCredentials)
