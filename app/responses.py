@@ -23,28 +23,28 @@ class ProjectCreateBody(BaseModel):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
-class ProjectCreateResponse(BaseModel):
+class ProjectResponse(BaseModel):
     id: int
     name: str
 
 
 class ResponseCreateProject(BaseModel):
     message: Annotated[str, Field(default="project created")]
-    project: ProjectCreateResponse
+    project: ProjectResponse
 
 
 class TaskCreateBody(BaseModel):
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
-class TaskCreateResponse(BaseModel):
+class TaskResponse(BaseModel):
     id: int
     title: str
 
 
 class ResponseCreateTask(BaseModel):
     message: Annotated[str, Field(default="task created")]
-    task: TaskCreateResponse
+    task: TaskResponse
 
 
 class UserLoginBody(BaseModel):

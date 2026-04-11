@@ -1,15 +1,27 @@
 from contextlib import asynccontextmanager
 
 import premium_access
+import projects
 import security
 from db_connection import get_engine, get_session
-from exceptions import InvalidCredentials, PermissionDenied, UserAlreadyExists
+from exceptions import (
+    InvalidCredentials,
+    PermissionDenied,
+    ProjectNotFound,
+    UserAlreadyExists,
+)
 from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from models import Base
-from operations import add_user
-from responses import ResponseCreateUser, UserCreateBody, UserCreateResponse
+from operations import (
+    add_user,
+)
+from responses import (
+    ResponseCreateUser,
+    UserCreateBody,
+    UserCreateResponse,
+)
 from sqlalchemy.orm import Session
 
 
@@ -63,8 +75,20 @@ async def handle_user_already_exists(request, exc: UserAlreadyExists):
     )
 
 
+@app.exception_handler(ProjectNotFound)
+async def project_not_found_handler(request, exc: ProjectNotFound):
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={
+            "error_code": exc.error_code,
+            "message": exc.message,
+        },
+    )
+
+
 app.include_router(security.router)
 app.include_router(premium_access.router)
+app.include_router(projects.router)
 
 
 @app.post(
