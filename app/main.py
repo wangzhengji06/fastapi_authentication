@@ -22,6 +22,7 @@ from responses import (
     UserCreateBody,
     UserCreateResponse,
 )
+from security import decode_access_token
 from sqlalchemy.orm import Session
 
 
@@ -40,6 +41,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request, call_next):
+    user_id = "unknown"
+    authorization = request.headers.get("Authorization")
+
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        try:
+            payload = decode_access_token(token)
+            subject = payload.get("sub")
+            if subject:
+                user_id = subject
+        except Exception:
+            pass
+
+    print(f"{request.method} {request.url.path} user_id={user_id}")
+    response = await call_next(request)
+    return response
 
 
 @app.exception_handler(InvalidCredentials)
