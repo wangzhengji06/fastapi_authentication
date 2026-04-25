@@ -124,4 +124,3 @@ def profile(current_user=Depends(get_current_user)):
         email=current_user.email,
         username=current_user.username,
     )
-
