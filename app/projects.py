@@ -4,13 +4,16 @@ from models import Project, User
 from operations import (
     add_project,
     add_task,
-    get_project_for_user,
+    get_project_for_read,
+    get_project_for_write,
     list_projects_for_user,
     list_tasks_for_project,
+    share_project,
 )
 from responses import (
     ProjectCreateBody,
     ProjectResponse,
+    ProjectShareBody,
     ResponseCreateProject,
     ResponseCreateTask,
     TaskCreateBody,
@@ -55,19 +58,27 @@ def list_projects(
     return [ProjectResponse(id=project.id, name=project.name) for project in projects]
 
 
-def get_owned_project(
+def get_writable_project(
     project_id: int,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> Project:
-    return get_project_for_user(session=session, user=user, project_id=project_id)
+    return get_project_for_write(session=session, user=user, project_id=project_id)
+
+
+def get_readable_project(
+    project_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Project:
+    return get_project_for_read(session=session, user=user, project_id=project_id)
 
 
 @router.get(
     "/projects/{project_id}",
     response_model=ProjectResponse,
 )
-def get_project(project: Project = Depends(get_owned_project)) -> ProjectResponse:
+def get_project(project: Project = Depends(get_readable_project)) -> ProjectResponse:
     return ProjectResponse(id=project.id, name=project.name)
 
 
@@ -78,7 +89,7 @@ def get_project(project: Project = Depends(get_owned_project)) -> ProjectRespons
 )
 def create_task(
     task: TaskCreateBody,
-    project: Project = Depends(get_owned_project),
+    project: Project = Depends(get_writable_project),
     session: Session = Depends(get_session),
 ) -> ResponseCreateTask:
     db_task = add_task(session=session, project=project, **task.model_dump())
@@ -97,8 +108,18 @@ def create_task(
     response_model=list[TaskResponse],
 )
 def list_tasks(
-    project: Project = Depends(get_owned_project),
+    project: Project = Depends(get_readable_project),
     session: Session = Depends(get_session),
 ) -> list[TaskResponse]:
     tasks = list_tasks_for_project(session=session, project=project)
     return [TaskResponse(id=task.id, title=task.title) for task in tasks]
+
+
+@router.post("/projects/{project_id}/share")
+def share_project_route(
+    body: ProjectShareBody,
+    project: Project = Depends(get_writable_project),
+    session: Session = Depends(get_session),
+):
+    share_project(session=session, project=project, user_id=body.user_id)
+    return {"message": "project shared"}

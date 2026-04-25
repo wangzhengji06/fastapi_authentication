@@ -8,7 +8,9 @@ from exceptions import (
     InvalidCredentials,
     PermissionDenied,
     ProjectNotFound,
+    ShareDenied,
     UserAlreadyExists,
+    UserNotFound,
 )
 from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -101,7 +103,29 @@ async def project_not_found_handler(request, exc: ProjectNotFound):
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={
-            "error_code": exc.error_code,
+            "error": exc.error_code,
+            "message": exc.message,
+        },
+    )
+
+
+@app.exception_handler(UserNotFound)
+async def user_not_found_handler(request, exc: UserNotFound):
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={
+            "error": exc.error_code,
+            "message": exc.message,
+        },
+    )
+
+
+@app.exception_handler(ShareDenied)
+async def share_denied_handler(request, exc: ShareDenied):
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "error": exc.error_code,
             "message": exc.message,
         },
     )

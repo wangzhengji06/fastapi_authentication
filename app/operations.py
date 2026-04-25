@@ -1,8 +1,9 @@
 from typing import List
 
-from exceptions import ProjectNotFound
+from exceptions import PermissionDenied, ProjectNotFound, ShareDenied, UserNotFound
 from models import Project, Role, Task, User
 from passlib.context import CryptContext
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -54,15 +55,15 @@ def add_project(
     return db_project
 
 
-def get_project_for_user(
-    session: Session,
-    user: User,
-    project_id: int,
-) -> Project:
+def get_project_for_read(session: Session, user: User, project_id: int) -> Project:
     project = (
         session.query(Project)
-        .filter(Project.user_id == user.id)
         .filter(Project.id == project_id)
+        .filter(
+            or_(
+                Project.user_id == user.id, Project.shared_users.any(User.id == user.id)
+            )
+        )
         .first()
     )
     if not project:
@@ -70,12 +71,33 @@ def get_project_for_user(
     return project
 
 
+def get_project_for_write(
+    session: Session,
+    user: User,
+    project_id: int,
+) -> Project:
+    project = session.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise ProjectNotFound()
+    if project.user_id != user.id:
+        raise PermissionDenied()
+    return project
+
+
 def list_projects_for_user(
     session: Session,
     user: User,
 ) -> List[Project]:
-    projects = session.query(Project).filter(Project.user_id == user.id).all()
-    return projects
+    return (
+        session.query(Project)
+        .filter(
+            or_(
+                Project.user_id == user.id,
+                Project.shared_users.any(User.id == user.id),
+            )
+        )
+        .all()
+    )
 
 
 def add_task(
@@ -96,3 +118,21 @@ def list_tasks_for_project(
 ) -> List[Task]:
     tasks = session.query(Task).filter(Task.project_id == project.id).all()
     return tasks
+
+
+def share_project(
+    session: Session,
+    project: Project,
+    user_id: int,
+) -> Project:
+    db_user = session.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise UserNotFound()
+    elif project.user == db_user or db_user in project.shared_users:
+        raise ShareDenied()
+
+    project.shared_users.append(db_user)
+    session.commit()
+    session.refresh(project)
+
+    return project

@@ -13,11 +13,16 @@ class UserAlreadyExists(Exception):
     message = "Username or Email already exists"
 
 
+class UserNotFound(Exception):
+    error_code = "user_not_found"
+    message = "User Not Found"
+
+
 class ProjectNotFound(Exception):
     error_code = "project_not_found"
     message = "Project Not Found"
 
 
-class TaskNotFound(Exception):
-    error_code = "task_not_found"
-    message = "Task Not Found"
+class ShareDenied(Exception):
+    error_code = "share_denied"
+    message = "Invalid share target"

@@ -66,3 +66,7 @@ class TokenResponse(BaseModel):
 
 class ResponseAdminUser(BaseModel):
     message: str
+
+
+class ProjectShareBody(BaseModel):
+    user_id: int
