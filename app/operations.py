@@ -120,6 +120,7 @@ def list_tasks_for_project(
     return tasks
 
 
+# No limitation here
 def share_project(
     session: Session,
     project: Project,
@@ -128,7 +129,7 @@ def share_project(
     db_user = session.query(User).filter(User.id == user_id).first()
     if not db_user:
         raise UserNotFound()
-    elif project.user == db_user or db_user in project.shared_users:
+    elif project.user.id == db_user.id or db_user in project.shared_users:
         raise ShareDenied()
 
     project.shared_users.append(db_user)
